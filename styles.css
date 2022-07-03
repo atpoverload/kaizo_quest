@@ -1,0 +1,74 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  text-align: center;
+}
+
+body {
+  font: 14px "Consolas", Helvetica, Arial, sans-serif;
+  line-height: 1.4em;
+  color: #4d4d4d;
+  min-width: 230px;
+  max-width: 1000px;
+  margin: 0 auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-font-smoothing: antialiased;
+  font-smoothing: antialiased;
+  font-weight: 300;
+  background-color: #000000;
+}
+
+.columns {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  width: 100%;
+  margin: auto;
+}
+
+.game-area {
+  flex: 66%;
+}
+
+.logs {
+  flex: 33%;
+  font: 10px "Consolas", Helvetica, Arial, sans-serif;
+}
+
+.character-display {
+  flex: 20%;
+}
+
+.character-info {
+  flex: 80%;
+}
+
+progress {
+  /* text-align: center; */
+  height: 1.5em;
+  width: 80%;
+
+  /* Set the progressbar to relative */
+  position:relative;
+}
+
+progress:before {
+  content: attr(data-label);
+  font-size: 8px;
+  color: black;
+
+  /*Position text over the progress bar */
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+}
+
+.action-button {
+  width: 20%;
+}
+
+.control-button {
+  width: 80%;
+}

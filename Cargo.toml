@@ -1,0 +1,12 @@
+[package]
+name = "kaizo-quest"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rand = "0.8"
+getrandom = { version = "0.2", features = ["js"] }
+
+yew = "0.19"

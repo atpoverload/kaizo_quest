@@ -1,0 +1,20 @@
+ - make data types serializable (`json`?)
+  - use `serde`
+ - make `alignment` more flexible
+  - how do we get an `enum`-like? use `ordinals`?
+ - add resource generation with `build.rs` for onion system
+ - make (`json`) serializable generation strategy
+  - use `serde`
+ - make ui more clear: i can't really tell what's going on
+  - add more graphic resources for `ui.rs`
+  - add resource generation from `build.rs`
+  - add animations/gradually logging?
+ - add item system
+ - add different encounter types
+  - scouting/wild
+  - kaizo master with ai
+  - "double" battle?
+ - add more scenes
+  - shop -> requires item system
+  - map -> select specific battlers
+  - scouting -> choose a new kaizo
