@@ -1,22 +1,160 @@
-use std::sync::Arc;
-use std::vec::Vec;
+use yew::prelude::*;
 
-use rand::random;
-use yew::{html, Component, Context, Html};
+use yew::html;
+use yew::html::Properties;
 
-use kaizo_quest::kaizo::{Action, ActionId, Character};
-use kaizo_quest::onion::{Battle, BattleState, generate_player_character, generate_enemy_character, generate_actions};
-use kaizo_quest::ui::{PlayerDisplay, EnemyDisplay};
+use rand::{random, thread_rng};
+use rand::distributions::{Distribution, Standard};
+
+use kaizo_quest::core::ActionId;
+use kaizo_quest::onion::{EXPERIENCE_TO_LEVEL, Experience, OnionBattle, OnionBattleState, OnionCharacter, OnionWorld, Scale};
+
+static RESOURCES: &str = "resources";
+
+fn get_resource(resource: &str) -> String {
+    format!("{}/{}.png", RESOURCES, resource)
+}
+
+#[derive(Properties, PartialEq)]
+pub struct CharacterProps { pub character: OnionCharacter }
+
+#[function_component(CharacterOverview)]
+pub fn character_overview(CharacterProps { character } : &CharacterProps) -> Html {
+    html! {
+        <div>
+            <p style="text-align:left;">
+                <img title={
+                    format!("{:?}", character.species.alignment)
+                } style="alignment:left;" src={ get_resource(&format!("{:?}", character.species.alignment)).to_lowercase() }
+                width={"5%"} height={"5%"}/>
+                { format!(" {} (BST: {}) Lv{} ", character.name.clone(), character.species.bst, character.attributes.level) }
+                // { format!(" {} ", character.name.clone()) }
+                { for character.state.status.keys().map(|status|
+                    html! {
+                        <img title={
+                            format!("{:?}", status)
+                        } style="alignment:left;" src={ get_resource(&format!("{:?}", status).to_lowercase()) }
+                        width={"5%"} height={"5%"}/>
+                    })
+                }
+            </p>
+        </div>
+    }
+}
+
+#[function_component(CharacterStats)]
+pub fn character_stats(CharacterProps { character } : &CharacterProps) -> Html {
+    html! {
+        <div>
+            <img title={
+                format!("Attack determines damage dealt.")
+            } src={ get_resource("attack") } width={"15%"} height={"15%"}/>
+            { format!("{}", character.attributes.stats.attack) }
+            { " " }
+            <img title={
+                format!("Defense determines damage taken.")
+            } src={ get_resource("defense") } width={"15%"} height={"15%"}/>
+            { format!("{}", character.attributes.stats.defense) }
+            { " " }
+            <img title={
+                format!("Speed determines turn order.")
+            } src={ get_resource("speed") } width={"15%"} height={"15%"}/>
+            { format!("{}", character.attributes.stats.speed) }
+        </div>
+    }
+}
+
+#[function_component(HealthBar)]
+pub fn health_bar(CharacterProps { character } : &CharacterProps) -> Html {
+    html! {
+        <div>
+            <div><CharacterOverview character={character.clone()}/></div>
+            <progress id="health" value={
+                format!("{}", character.state.health)
+            } max={
+                format!("{}", character.attributes.stats.health)
+            }/>
+        </div>
+    }
+}
+
+#[function_component(HealthBarWithValue)]
+pub fn health_bar_with_value(CharacterProps { character } : &CharacterProps) -> Html {
+    let n = character.attributes.stats.health.to_string().len();
+    html! {
+        <div>
+            <div><CharacterOverview character={character.clone()}/></div>
+            <progress id="health" value={
+                format!("{}", character.state.health)
+            } max={
+                format!("{}", character.attributes.stats.health)
+            }
+            data-label={ format!("HP:{: >n$}/{}", character.state.health, character.attributes.stats.health) }
+            title={ format!("{} will die if their health reaches 0.", character.name) }/>
+        </div>
+    }
+}
+
+#[function_component(ExperienceBar)]
+pub fn experience_bar(CharacterProps { character } : &CharacterProps) -> Html {
+    html! {
+        <div>
+            <progress id="experience" value={
+                format!("{}", character.attributes.experience)
+            } max={"100"}
+            data-label={ format!("EXP:{: >3}/{}", character.attributes.experience, EXPERIENCE_TO_LEVEL) }
+            title={ format!(
+                "{} will gain a level after gaining {} experience.",
+                character.name,
+                EXPERIENCE_TO_LEVEL - character.attributes.experience
+            )} ></progress>
+        </div>
+    }
+}
+
+#[function_component(PlayerDisplay)]
+pub fn player_display(CharacterProps { character } : &CharacterProps) -> Html {
+    html! {
+        <div>
+            <div class="columns">
+                <div class="character-display">
+                    <div><img src={ get_resource("player") } style="position: relative;"/></div>
+                    <div><CharacterStats character={character.clone()} /></div>
+                </div>
+                <div class="character-info">
+                    <div><HealthBarWithValue character={character.clone()} /></div>
+                    <div><ExperienceBar character={character.clone()} /></div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+#[function_component(EnemyDisplay)]
+pub fn enemy_display(CharacterProps { character } : &CharacterProps) -> Html {
+    html! {
+        <div>
+            <div class="columns">
+                <div class="character-info">
+                    <div><HealthBarWithValue character={character.clone()} /></div>
+                </div>
+                <div class="character-display">
+                    <div><img src={ get_resource("enemy") } style="position: relative;"/></div>
+                </div>
+            </div>
+        </div>
+    }
+}
 
 // TODO: all these helper enums need to be broken up
 enum Scene {
-    Battle(Battle),
-    Menu(Character),
+    Battle(OnionBattle),
+    Menu(OnionCharacter),
 }
 
 enum BattleAction {
     ActionChosen(ActionId),
-    RunAway,
+    Flee,
 }
 
 enum MenuAction {
@@ -31,7 +169,7 @@ enum Msg {
 }
 
 struct App {
-    actions: Vec<Arc<dyn Action>>,
+    world: OnionWorld,
     scene: Scene,
     logs: Vec<String>,
 }
@@ -41,10 +179,14 @@ impl Component for App {
     type Properties = ();
 
     fn create(_: &Context<Self>) -> Self {
-        let actions = generate_actions();
+        let world: OnionWorld = Standard.sample(&mut thread_rng());
+        let mut character: OnionCharacter = world.sample(&mut thread_rng());
+        character.gain_experience(EXPERIENCE_TO_LEVEL);
+        character.attributes.stats = character.species.stats.scale(EXPERIENCE_TO_LEVEL);
+        character.refresh();
         Self {
-            scene: Scene::Menu(generate_player_character(actions.len())),
-            actions,
+            scene: Scene::Menu(character),
+            world,
             logs: Vec::new(),
         }
     }
@@ -55,16 +197,16 @@ impl Component for App {
             (Msg::BattleAction(action), Scene::Battle(battle)) => {
                 // get player action
                 let player_action = match action {
-                    BattleAction::ActionChosen(action) => self.actions.get(action).unwrap().clone(),
-                    BattleAction::RunAway => {
+                    BattleAction::ActionChosen(action) => &self.world.actions[action],
+                    BattleAction::Flee => {
                         battle.player.refresh();
                         self.scene = Scene::Menu(battle.player.clone());
                         return true;
                     }
                 };
                 // get enemy action
-                let enemy_action = battle.enemy.attributes.actions.get(random::<usize>() % battle.enemy.attributes.actions.len()).unwrap();
-                let enemy_action = self.actions.get(*enemy_action).unwrap().clone();
+                let enemy_action = battle.enemy.attributes.actions.get(random::<usize>() % battle.enemy.attributes.actions.len()).copied().unwrap();
+                let enemy_action = &self.world.actions[enemy_action];
 
                 // determine action order:
                 //  - highest priority wins
@@ -81,26 +223,31 @@ impl Component for App {
                 };
 
                 if player_first {
-                    self.logs.extend(battle.player_turn(player_action.clone()));
-                    self.logs.extend(battle.enemy_turn(enemy_action.clone()));
+                    self.logs.extend(battle.player_turn(player_action));
+                    self.logs.extend(battle.enemy_turn(enemy_action));
                 } else {
-                    self.logs.extend(battle.enemy_turn(enemy_action.clone()));
-                    self.logs.extend(battle.player_turn(player_action.clone()));
+                    self.logs.extend(battle.enemy_turn(enemy_action));
+                    self.logs.extend(battle.player_turn(player_action));
                 }
 
                 match battle.end_turn() {
-                    (BattleState::Victory, logs) => {
+                    (OnionBattleState::Victory, logs) => {
                         // award xp
                         self.logs.extend(logs);
                         // TODO: have to chose if the battle is over or if we are still going
+                        // TODO: if we learned moves, it needs to happen here
                         battle.player.refresh();
                         // TODO: if we add evos, it should happen before this
                         self.scene = Scene::Menu(battle.player.clone());
                     },
-                    (BattleState::Defeat, logs) => {
+                    (OnionBattleState::Defeat, logs) => {
                         self.logs.extend(logs);
                         // re-roll player kaizo
-                        self.scene = Scene::Menu(generate_player_character(self.actions.len()));
+                        let mut character = self.world.sample(&mut thread_rng());
+                        character.gain_experience(EXPERIENCE_TO_LEVEL);
+                        character.attributes.stats = character.species.stats.scale(EXPERIENCE_TO_LEVEL);
+                        character.refresh();
+                        self.scene = Scene::Menu(character);
                     },
                     _ => ()
                 }
@@ -108,9 +255,10 @@ impl Component for App {
             (Msg::MenuAction(action), Scene::Menu(player)) => match action {
                 MenuAction::Battle => {
                     // TODO: we need to think in terms of generating a whole sequence of battles
-                    let enemy = generate_enemy_character(self.actions.len(), player.attributes.level);
+                    let player = player.clone();
+                    let enemy = self.world.sample_at_level(player.attributes.level, &mut thread_rng());
                     self.logs.push(format!("{} appeared!", enemy.name));
-                    self.scene = Scene::Battle(Battle { player: player.clone(), enemy });
+                    self.scene = Scene::Battle(OnionBattle { player, enemy });
                 },
                 MenuAction::Log(log) => self.logs.push(log),
                 MenuAction::Scout => (),
@@ -129,7 +277,7 @@ impl Component for App {
         //       probably will be redesigned eventually anyways...
         html! {
             <div>
-                <div>{ "kaizo quest" }</div>
+                <div>{ "Kaizo Quest" }</div>
                 <div class="columns">
                     <div class="game-area">
                         <div> {
@@ -151,7 +299,7 @@ impl Component for App {
                             <div> {
                                 for player.attributes.actions.iter().map(|action| {
                                     let action_id = action.clone();
-                                    let action = self.actions.get(action_id).unwrap().name();
+                                    let action = self.world.actions[action_id].name();
                                     let callback = match self.scene {
                                         Scene::Battle(_) => ctx.link().callback(move |_| Msg::BattleAction(BattleAction::ActionChosen(action_id))),
                                         Scene::Menu(_) => ctx.link().callback(
@@ -160,10 +308,10 @@ impl Component for App {
                                     html! {
                                         <button
                                             class="action-button"
-                                            title={ self.actions.get(action_id).unwrap().description() }
+                                            title={ self.world.actions[action_id].description() }
                                             onclick={ callback }
                                         > {
-                                            format!("{}", self.actions.get(action_id).unwrap().name())
+                                            format!("{}", self.world.actions[action_id].name())
                                         } </button>
                                     }
                                 })
@@ -172,8 +320,8 @@ impl Component for App {
                             <div> {
                                 match &self.scene {
                                     Scene::Battle(_) => html! {
-                                        <button class="control-button" onclick={ctx.link().callback(move |_| Msg::BattleAction(BattleAction::RunAway))}>{
-                                            "run away"
+                                        <button class="control-button" onclick={ctx.link().callback(move |_| Msg::BattleAction(BattleAction::Flee))} title="Escape from this battle and return to the menu">{
+                                            "Flee"
                                         } </button>
                                     },
                                     Scene::Menu(_) => html! {

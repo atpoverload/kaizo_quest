@@ -1,3 +1,3 @@
-pub mod kaizo;
+pub mod core;
 pub mod onion;
-pub mod ui;
+// pub mod ui;

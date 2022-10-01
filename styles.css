@@ -37,17 +37,19 @@ body {
 }
 
 .character-display {
-  flex: 20%;
+  flex: 23%;
+  margin: 2px;
 }
 
 .character-info {
-  flex: 80%;
+  flex: 73%;
+  margin: 2px;
 }
 
 progress {
   /* text-align: center; */
   height: 1.5em;
-  width: 80%;
+  width: 95%;
 
   /* Set the progressbar to relative */
   position:relative;
